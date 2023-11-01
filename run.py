@@ -89,16 +89,20 @@ def run(config):
   print('\n')
   print('Extracting token contexts...')
   train_set = FlattenedDocumentsDataset(radius=radius, dataset=tokenized_train['review_ids'])
+  test_set = FlattenedDocumentsDataset(radius=radius, dataset=tokenized_test['review_ids'])
   print('Token Contexts Flattened')
   print('\n')
   print('Training...')
   train_dataloader = DataLoader(
       dataset=train_set, batch_size=batch_size, collate_fn=lambda x: collate_fn(x, radius, scaling_factor, list(tokenizer.vocab.values()))
   )
+  test_dataloaer = DataLoader(
+      dataset=test_set, batch_size=batch_size, collate_fn=lambda x: collate_fn(x, radius, scaling_factor, list(tokenizer.vocab.values()))
+  )
   model = Word2Vec(vocabulary_size=len(tokenizer.vocab), embeddings_dimension=embedding_dim)
   model = model.to(DEVICE)
   optimizer = torch.optim.Adam(lr=lr, params=model.parameters())
-  train.train_batched(model=model, optimizer=optimizer, num_epochs=n_epochs, train_dataloader=train_dataloader)
+  train.train_batched(model=model, optimizer=optimizer, num_epochs=n_epochs, train_dataloader=train_dataloader, test_dataloader=test_dataloaer)
   print('Train Done. Saving model.')
   train.save_model(model, optimizer, embedding_dim=embedding_dim, batch=batch_size, epoch=n_epochs, radius=radius, ratio=scaling_factor)
 
