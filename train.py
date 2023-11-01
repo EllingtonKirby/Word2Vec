@@ -32,7 +32,7 @@ def train_batched(model, optimizer, num_epochs, train_dataloader, test_dataloade
       epoch_loss += loss
     losses.append(epoch_loss)
     print('-'*100)
-    print(f'Epoch {i} done. Loss: {epoch_loss}')
+    print(f'Epoch {i} done. Loss: {epoch_loss / len(train_dataloader)}')
   
   print('-'*100)
   print('Evaluating test:')
@@ -44,6 +44,6 @@ def train_batched(model, optimizer, num_epochs, train_dataloader, test_dataloade
       stacked_reals = torch.hstack((torch.zeros_like(pos_outs), torch.ones_like(neg_outs)))
       loss = criterion(stacked_outs, stacked_reals)
       test_loss += loss
-  print(f'Test loss: {test_loss}')
+  print(f'Test loss: {test_loss / len(test_dataloader)}')
   
   return losses
