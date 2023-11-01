@@ -1,8 +1,24 @@
 import torch
 import torch.nn as nn
 from tqdm import tqdm
-from run import DEVICE
 
+global DEVICE
+DEVICE = None
+if torch.cuda.is_available():
+    DEVICE = torch.device('cuda:0')
+    print("CUDA is available and is used")
+elif not torch.backends.mps.is_available():
+    if not torch.backends.mps.is_built():
+        print("MPS not available because the current PyTorch install was not "
+            "built with MPS enabled.")
+    else:
+        print("MPS not available because the current MacOS version is not 12.3+ "
+            "and/or you do not have an MPS-enabled device on this machine.")
+    DEVICE = torch.device('cpu')
+    print("CUDA and MPS are not available, switching to CPU.")
+else:
+    DEVICE = torch.device("mps")
+    print("CUDA not available, switching to MPS")
 
 def save_model(model, optimizer, embedding_dim, radius, ratio, batch, epoch):
   path = f'model_dim-{embedding_dim}_radius-{radius}_ratio-{ratio}_batch-{batch}_epoch_{epoch}.ckpt'

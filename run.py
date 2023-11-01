@@ -52,24 +52,6 @@ class Config(dict):
             return self._conf[name]
         return None
 
-global DEVICE
-DEVICE = None
-if torch.cuda.is_available():
-    DEVICE = torch.device('cuda:0')
-    print("CUDA is available and is used")
-elif not torch.backends.mps.is_available():
-    if not torch.backends.mps.is_built():
-        print("MPS not available because the current PyTorch install was not "
-            "built with MPS enabled.")
-    else:
-        print("MPS not available because the current MacOS version is not 12.3+ "
-            "and/or you do not have an MPS-enabled device on this machine.")
-    DEVICE = torch.device('cpu')
-    print("CUDA and MPS are not available, switching to CPU.")
-else:
-    DEVICE = torch.device("mps")
-    print("CUDA not available, switching to MPS")
-
 def run(config):
   config = Config(config)
   radius = config.radius
@@ -100,7 +82,7 @@ def run(config):
       dataset=test_set, batch_size=batch_size, collate_fn=lambda x: collate_fn(x, radius, scaling_factor, list(tokenizer.vocab.values()))
   )
   model = Word2Vec(vocabulary_size=len(tokenizer.vocab), embeddings_dimension=embedding_dim)
-  model = model.to(DEVICE)
+  model = model.to(train.DEVICE)
   optimizer = torch.optim.Adam(lr=lr, params=model.parameters())
   train.train_batched(model=model, optimizer=optimizer, num_epochs=n_epochs, train_dataloader=train_dataloader, test_dataloader=test_dataloaer)
   print('Train Done. Saving model.')
