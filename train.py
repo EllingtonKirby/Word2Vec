@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 
 global DEVICE
@@ -32,8 +33,9 @@ def save_model(model, optimizer, embedding_dim, radius, ratio, batch, epoch):
   )
   print(f'Model saved to {path}')
 
-def train_batched(model, optimizer, num_epochs, train_dataloader, test_dataloader):
+def train_batched(model, optimizer, num_epochs, train_dataloader, val_dataloader):
   criterion = nn.BCELoss()
+  scheduler = ReduceLROnPlateau(optimizer, 'min', patience=2)
   losses = []
   for i in range(num_epochs):
     epoch_loss = 0
@@ -50,16 +52,31 @@ def train_batched(model, optimizer, num_epochs, train_dataloader, test_dataloade
     print('-'*100)
     print(f'Epoch {i} done. Loss: {epoch_loss / len(train_dataloader)}')
   
-  print('-'*100)
-  print('Evaluating test:')
-  with torch.no_grad():
-    test_loss = 0
-    for _, batch in enumerate(tqdm(test_dataloader)):
-      pos_outs, neg_outs = model(batch['word_id'].to(DEVICE), batch['positive_context_ids'].to(DEVICE), batch['negative_context_ids'].to(DEVICE))
-      stacked_outs = torch.hstack((pos_outs, neg_outs))
-      stacked_reals = torch.hstack((torch.ones_like(pos_outs), torch.zeros_like(neg_outs)))
-      loss = criterion(stacked_outs, stacked_reals)
-      test_loss += loss
-  print(f'Test loss: {test_loss / len(test_dataloader)}')
+    print('-'*100)
+    print('Evaluating validation:')
+    with torch.no_grad():
+      valid_loss = 0
+      for _, batch in enumerate(tqdm(val_dataloader)):
+        pos_outs, neg_outs = model(batch['word_id'].to(DEVICE), batch['positive_context_ids'].to(DEVICE), batch['negative_context_ids'].to(DEVICE))
+        stacked_outs = torch.hstack((pos_outs, neg_outs))
+        stacked_reals = torch.hstack((torch.ones_like(pos_outs), torch.zeros_like(neg_outs)))
+        loss = criterion(stacked_outs, stacked_reals)
+        valid_loss += loss
+    print(f'Validaton loss: {valid_loss / len(val_dataloader)}')
+    scheduler.step(valid_loss / len(val_dataloader))
   
   return losses
+
+def test_model(model, dataloader):
+    criterion = nn.BCELoss()
+    print('-'*100)
+    print('Evaluating test:')
+    with torch.no_grad():
+      valid_loss = 0
+      for _, batch in enumerate(tqdm(dataloader)):
+        pos_outs, neg_outs = model(batch['word_id'].to(DEVICE), batch['positive_context_ids'].to(DEVICE), batch['negative_context_ids'].to(DEVICE))
+        stacked_outs = torch.hstack((pos_outs, neg_outs))
+        stacked_reals = torch.hstack((torch.ones_like(pos_outs), torch.zeros_like(neg_outs)))
+        loss = criterion(stacked_outs, stacked_reals)
+        valid_loss += loss
+    print(f'Test loss: {valid_loss / len(dataloader)}')

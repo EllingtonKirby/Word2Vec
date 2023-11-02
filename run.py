@@ -26,8 +26,9 @@ def tokenize_dataset(tokenizer, n_samples=100):
   shuffled = dataset.shuffle(seed=seed)
   selected = shuffled.select(range(n_samples))
   tokenized = selected.map(lambda x: preprocessing_fn(x, tokenizer), remove_columns=['review', 'sentiment'])
-  split = tokenized.train_test_split(test_size=.2, train_size=.8, seed=42)
-  return split['train'], split['test']
+  split = tokenized.train_test_split(test_size=.33, seed=42)
+  test_valid = split['test'].train_test_split(test_size=.5, train_size=.5, seed=42)
+  return split['train'], test_valid['test'], test_valid['train']
 
 
 def collate_fn(batch, radius, scaling_factor, vocab):
@@ -66,11 +67,12 @@ def run(config):
   print('-'*100)
   print('Tokenizing Dataset...')
   tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", do_lower_case=True)
-  tokenized_train, tokenized_test = tokenize_dataset(tokenizer, n_samples)
+  tokenized_train, tokenized_test, tokenized_valid = tokenize_dataset(tokenizer, n_samples)
   print('Tokenizing Done')
   print('\n')
   print('Extracting token contexts...')
   train_set = FlattenedDocumentsDataset(radius=radius, dataset=tokenized_train['review_ids'])
+  valid_set = FlattenedDocumentsDataset(radius=radius, dataset=tokenized_valid['review_ids'])
   test_set = FlattenedDocumentsDataset(radius=radius, dataset=tokenized_test['review_ids'])
   print('Token Contexts Flattened')
   print('\n')
@@ -78,13 +80,17 @@ def run(config):
   train_dataloader = DataLoader(
       dataset=train_set, batch_size=batch_size, collate_fn=lambda x: collate_fn(x, radius, scaling_factor, list(tokenizer.vocab.values()))
   )
-  test_dataloaer = DataLoader(
+  valid_dataloaer = DataLoader(
+      dataset=valid_set, batch_size=batch_size, collate_fn=lambda x: collate_fn(x, radius, scaling_factor, list(tokenizer.vocab.values()))
+  )
+  test_dataloader = DataLoader(
       dataset=test_set, batch_size=batch_size, collate_fn=lambda x: collate_fn(x, radius, scaling_factor, list(tokenizer.vocab.values()))
   )
   model = Word2Vec(vocabulary_size=len(tokenizer.vocab), embeddings_dimension=embedding_dim)
   model = model.to(train.DEVICE)
   optimizer = torch.optim.Adam(lr=lr, params=model.parameters())
-  train.train_batched(model=model, optimizer=optimizer, num_epochs=n_epochs, train_dataloader=train_dataloader, test_dataloader=test_dataloaer)
+  train.train_batched(model=model, optimizer=optimizer, num_epochs=n_epochs, train_dataloader=train_dataloader, val_dataloader=valid_dataloaer)
+  train.test_model(model=model, dataloader=test_dataloader)
   print('Train Done. Saving model.')
   train.save_model(model, optimizer, embedding_dim=embedding_dim, batch=batch_size, epoch=n_epochs, radius=radius, ratio=scaling_factor)
 

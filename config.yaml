@@ -1,7 +1,7 @@
 radius: 2
 scaling_factor: 3
-n_samples: 10
-batch_size: 4
-embedding_dim: 4
-n_epochs: 1
+n_samples: 6000
+batch_size: 100
+embedding_dim: 32
+n_epochs: 20
 lr: .01
