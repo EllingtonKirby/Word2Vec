@@ -30,7 +30,7 @@ class Advanced_Conv1dClassifier(nn.Module):
           self.embedding = nn.Embedding(num_embeddings=vocab_size, embedding_dim=self.embedding_dim)
 
         self.conv_1 = nn.Conv1d(in_channels=self.embedding_dim, out_channels=self.feature_size, kernel_size=3, padding=1)
-        self.conv_2 = nn.Conv1d(in_channels=self.feature_size, out_channels=self.feature_size, kernel_size=7, padding=3)
+        self.conv_2 = nn.Conv1d(in_channels=self.feature_size, out_channels=self.feature_size * 2, kernel_size=3, padding=1, stride=2)
         self.relu = nn.ReLU()
 
         self.pooling_layer = nn.AdaptiveMaxPool1d(output_size=2)
@@ -74,23 +74,13 @@ def preprocessing_fn(x, tokenizer):
 
 def prep_dataset(tokenizer):
   dataset = load_dataset("scikit-learn/imdb", split="train")
-  n_samples = 5000  # the number of training example
+  n_samples = 10000  # the number of training example
   seed = 42
-  # We first shuffle the data !
   dataset = dataset.shuffle(seed=seed)
-
-  # Select 5000 samples
   dataset = dataset.select(range(n_samples))
-
-  # Tokenize the dataset
   dataset = dataset.map(lambda x: preprocessing_fn(x, tokenizer), batched=False)
-
-  # Remove useless columns
   dataset = dataset.remove_columns(['review','sentiment'])
-
-  # Split the train and validation
   dataset = dataset.train_test_split(train_size=.8, seed=42)
-
   train_set = dataset['train']
   valid_set = dataset['test']
   return train_set, valid_set
@@ -156,7 +146,7 @@ def train(path=None, embeddings_dim=4, batch_size=32, lr=1e-2):
 if __name__ == '__main__':
    train(
       path=None,
-      embeddings_dim=32,
+      embeddings_dim=100,
       batch_size=32,
       lr=1e-2,
    )
