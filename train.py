@@ -57,7 +57,7 @@ def train_batched(model, optimizer, num_epochs, train_dataloader, test_dataloade
     for _, batch in enumerate(tqdm(test_dataloader)):
       pos_outs, neg_outs = model(batch['word_id'].to(DEVICE), batch['positive_context_ids'].to(DEVICE), batch['negative_context_ids'].to(DEVICE))
       stacked_outs = torch.hstack((pos_outs, neg_outs))
-      stacked_reals = torch.hstack((torch.zeros_like(pos_outs), torch.ones_like(neg_outs)))
+      stacked_reals = torch.hstack((torch.ones_like(pos_outs), torch.zeros_like(neg_outs)))
       loss = criterion(stacked_outs, stacked_reals)
       test_loss += loss
   print(f'Test loss: {test_loss / len(test_dataloader)}')
