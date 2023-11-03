@@ -89,7 +89,7 @@ def run(config):
   model = Word2Vec(vocabulary_size=len(tokenizer.vocab), embeddings_dimension=embedding_dim)
   model = model.to(train.DEVICE)
   optimizer = torch.optim.Adam(lr=lr, params=model.parameters())
-  train.train_batched(model=model, optimizer=optimizer, num_epochs=n_epochs, train_dataloader=train_dataloader, val_dataloader=valid_dataloaer)
+  train.train_batched(model=model, optimizer=optimizer, num_epochs=n_epochs, train_dataloader=train_dataloader, valid_dataloader=valid_dataloaer)
   train.test_model(model=model, dataloader=test_dataloader)
   print('Train Done. Saving model.')
   train.save_model(model, optimizer, embedding_dim=embedding_dim, batch=batch_size, epoch=n_epochs, radius=radius, ratio=scaling_factor)
