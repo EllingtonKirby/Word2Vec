@@ -1,4 +1,4 @@
-radius: 4
+radius: 2
 scaling_factor: 3
 n_samples: 5000
 batch_size: 64

@@ -19,33 +19,41 @@ class Advanced_Conv1dClassifier(nn.Module):
     - embedding_dim: size of the word vectors
     """
 
-    def __init__(self, vocab_size, embedding_dim, feature_size=3, kernel_size=3, embeddings=None):
+    def __init__(self, vocab_size, embedding_dim, embeddings=None):
         super().__init__()
         self.embedding_dim = embedding_dim
-        self.feature_size = feature_size
-        
         if embeddings != None:
           self.embedding = nn.Embedding.from_pretrained(embeddings, freeze=False)
         else:
           self.embedding = nn.Embedding(num_embeddings=vocab_size, embedding_dim=self.embedding_dim)
 
-        self.conv_1 = nn.Conv1d(in_channels=self.embedding_dim, out_channels=self.feature_size, kernel_size=3, padding=1)
-        self.conv_2 = nn.Conv1d(in_channels=self.feature_size, out_channels=self.feature_size * 2, kernel_size=3, padding=1, stride=2)
+        self.conv_1 = nn.Conv1d(in_channels=self.embedding_dim, out_channels=100, kernel_size=3, padding=1)
+        self.pooling_1 = nn.AdaptiveMaxPool1d(output_size=253)
+        self.flatten_1 = nn.Flatten()
+
+        self.conv_2 = nn.Conv1d(in_channels=self.embedding_dim, out_channels=100, kernel_size=5, padding=2)
+        self.pooling_2 = nn.AdaptiveMaxPool1d(output_size=251)
+        self.flatten_2 = nn.Flatten()
+        
+        self.conv_3 = nn.Conv1d(in_channels=self.embedding_dim, out_channels=100, kernel_size=7, padding=3)
+        self.pooling_3 = nn.AdaptiveMaxPool1d(output_size=249)
+        self.flatten_3 = nn.Flatten()
+
         self.relu = nn.ReLU()
 
-        self.pooling_layer = nn.AdaptiveMaxPool1d(output_size=2)
-        self.flatten_layer = nn.Flatten()
+        self.dropout = nn.Dropout(p=.5)
         self.linear_layer = nn.LazyLinear(out_features=2)
+        self.sigmoid = nn.Sigmoid()
 
 
     def forward(self, input_ids):
         embedding_output = self.embedding(input_ids)
-        conv1_output = self.relu(self.conv_1(embedding_output.mT))
-        conv2_output = self.relu(self.conv_2(conv1_output))
-        pooling_output = self.pooling_layer(conv2_output)
-        flattened_output = self.flatten_layer(pooling_output)
-        linear_output = self.linear_layer(flattened_output)
-        return linear_output
+        output_1 = self.flatten_1(self.pooling_1(self.relu(self.conv_1(embedding_output.mT))))
+        output_2 = self.flatten_2(self.pooling_2(self.relu(self.conv_2(embedding_output.mT))))
+        output_3 = self.flatten_3(self.pooling_3(self.relu(self.conv_3(embedding_output.mT))))
+        output = self.dropout(torch.concatenate((output_1, output_2, output_3), dim=-1))
+        linear_output = self.linear_layer(output)
+        return self.sigmoid(linear_output)
 
 class DataCollator:
     def __init__(self, tokenizer):
@@ -74,7 +82,7 @@ def preprocessing_fn(x, tokenizer):
 
 def prep_dataset(tokenizer):
   dataset = load_dataset("scikit-learn/imdb", split="train")
-  n_samples = 10000  # the number of training example
+  n_samples = 5000  # the number of training example
   seed = 42
   dataset = dataset.shuffle(seed=seed)
   dataset = dataset.select(range(n_samples))
@@ -108,7 +116,7 @@ def train(path=None, embeddings_dim=4, batch_size=32, lr=1e-2):
   else:
      word_embeddings = None
 
-  loss_function = nn.CrossEntropyLoss()
+  loss_function = nn.BCELoss()
 
   model = Advanced_Conv1dClassifier(
       vocab_size=len(tokenizer.vocab), embedding_dim=embeddings_dim, embeddings=word_embeddings
@@ -119,28 +127,35 @@ def train(path=None, embeddings_dim=4, batch_size=32, lr=1e-2):
   n_epochs = 10 
   for e in range(n_epochs):
       train_loss_per_epoch = []
+      train_accuracy = 0
       for i, batch in enumerate(tqdm(train_dataloader)):
           optimizer.zero_grad()
-          input, target = batch['review_ids'].to(DEVICE), F.one_hot(batch['label']).reshape(-1, 2).float().to(DEVICE)
+          input, target = batch['review_ids'].to(DEVICE), batch['label'].to(DEVICE)
           output = model(input)
-          loss = loss_function(output, target)
+          loss = loss_function(output, F.one_hot(target).reshape(-1, 2).float())
           loss.backward()
           optimizer.step()
           train_loss_per_epoch.append(loss.item())
+          train_accuracy += torch.sum(torch.argmax(output, dim=1) == target.squeeze())
       
       # Validation
       valid_loss_per_epoch = []
+      valid_accuracy = 0
       with torch.no_grad():
           for i, batch in enumerate(tqdm(valid_dataloader)):
-              input, target = batch['review_ids'].to(DEVICE), F.one_hot(batch['label']).reshape(-1, 2).float().to(DEVICE)
+              input, target = batch['review_ids'].to(DEVICE), batch['label'].to(DEVICE)
               output = model(input)
-              loss = loss_function(output, target)
+              loss = loss_function(output, F.one_hot(target).reshape(-1, 2).float())
               valid_loss_per_epoch.append(loss.item())
+              valid_accuracy += torch.sum(torch.argmax(output, dim=1) == target.squeeze())
 
       print('-'*100)
       print(f'Epoch: {e}')
       print(f'Train Loss: {np.array(train_loss_per_epoch).mean()}')
       print(f'Valid Loss: {np.array(valid_loss_per_epoch).mean()}')
+      print(f'Train Accuracy: {train_accuracy / len(train_dataloader.dataset)}')
+      print(f'Valid Accuracy: {valid_accuracy / len(valid_dataloader.dataset)}')
+  return model
     
 
 if __name__ == '__main__':

@@ -33,12 +33,15 @@ def save_model(model, optimizer, embedding_dim, radius, ratio, batch, epoch):
   )
   print(f'Model saved to {path}')
 
-def train_batched(model, optimizer, num_epochs, train_dataloader, val_dataloader):
+def train_batched(model, optimizer, num_epochs, train_dataloader, valid_dataloader):
   criterion = nn.BCELoss()
   scheduler = ReduceLROnPlateau(optimizer, 'min', patience=2)
   losses = []
   for i in range(num_epochs):
     epoch_loss = 0
+    epoch_accuracy = 0
+    print('-'*100)
+    print('Training:')
     for _, batch in enumerate(tqdm(train_dataloader)):
       optimizer.zero_grad()
       pos_outs, neg_outs = model(batch['word_id'].to(DEVICE), batch['positive_context_ids'].to(DEVICE), batch['negative_context_ids'].to(DEVICE))
@@ -48,35 +51,42 @@ def train_batched(model, optimizer, num_epochs, train_dataloader, val_dataloader
       loss.backward()
       optimizer.step()
       epoch_loss += loss
+      epoch_accuracy += torch.sum(torch.round(stacked_outs) == stacked_reals) / torch.numel(stacked_reals)
     losses.append(epoch_loss)
+
     print('-'*100)
-    print(f'Epoch {i} done. Loss: {epoch_loss / len(train_dataloader)}')
-  
-    print('-'*100)
-    print('Evaluating validation:')
+    print('Validating:')
     with torch.no_grad():
       valid_loss = 0
-      for _, batch in enumerate(tqdm(val_dataloader)):
+      valid_accuracy = 0
+      for _, batch in enumerate(tqdm(valid_dataloader)):
         pos_outs, neg_outs = model(batch['word_id'].to(DEVICE), batch['positive_context_ids'].to(DEVICE), batch['negative_context_ids'].to(DEVICE))
         stacked_outs = torch.hstack((pos_outs, neg_outs))
         stacked_reals = torch.hstack((torch.ones_like(pos_outs), torch.zeros_like(neg_outs)))
         loss = criterion(stacked_outs, stacked_reals)
         valid_loss += loss
-    print(f'Validaton loss: {valid_loss / len(val_dataloader)}')
-    scheduler.step(valid_loss / len(val_dataloader))
-  
-  return losses
+        valid_accuracy += torch.sum(torch.round(stacked_outs) == stacked_reals) / torch.numel(stacked_reals)
+    print('-'*100)
+    print(f'Epoch {i} done.')
+    print(f'Train Loss: {epoch_loss / len(train_dataloader)}')
+    print(f'Validaton loss: {valid_loss / len(valid_dataloader)}')
+    print(f'Train Accuracy: {epoch_accuracy / len(train_dataloader)}')
+    print(f'Validation Accuracy: {valid_accuracy / len(valid_dataloader)}')
+    scheduler.step(valid_loss / len(valid_dataloader))
 
 def test_model(model, dataloader):
     criterion = nn.BCELoss()
     print('-'*100)
-    print('Evaluating test:')
+    print('Testing:')
     with torch.no_grad():
       valid_loss = 0
+      valid_accuracy = 0
       for _, batch in enumerate(tqdm(dataloader)):
         pos_outs, neg_outs = model(batch['word_id'].to(DEVICE), batch['positive_context_ids'].to(DEVICE), batch['negative_context_ids'].to(DEVICE))
         stacked_outs = torch.hstack((pos_outs, neg_outs))
         stacked_reals = torch.hstack((torch.ones_like(pos_outs), torch.zeros_like(neg_outs)))
         loss = criterion(stacked_outs, stacked_reals)
         valid_loss += loss
+        valid_accuracy += torch.sum(torch.round(stacked_outs) == stacked_reals) / torch.numel(stacked_reals)
     print(f'Test loss: {valid_loss / len(dataloader)}')
+    print(f'Test Accuracy: {valid_accuracy / len(dataloader)}')
