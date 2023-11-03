@@ -42,7 +42,7 @@ class Advanced_Conv1dClassifier(nn.Module):
         self.relu = nn.ReLU()
 
         self.dropout = nn.Dropout(p=.5)
-        self.linear_layer = nn.LazyLinear(out_features=2)
+        self.linear_layer = nn.LazyLinear(out_features=1)
         self.sigmoid = nn.Sigmoid()
 
 
@@ -53,7 +53,7 @@ class Advanced_Conv1dClassifier(nn.Module):
         output_3 = self.flatten_3(self.pooling_3(self.relu(self.conv_3(embedding_output.mT))))
         output = self.dropout(torch.concatenate((output_1, output_2, output_3), dim=-1))
         linear_output = self.linear_layer(output)
-        return self.sigmoid(linear_output)
+        return linear_output
 
 class DataCollator:
     def __init__(self, tokenizer):
@@ -110,13 +110,13 @@ def train(path=None, embeddings_dim=4, batch_size=32, lr=1e-2):
   valid_dataloader = DataLoader(
       valid_set, batch_size=batch_size, collate_fn=data_collator
   )
-  
+
   if path != None:
-    word_embeddings, context_embeddings = load_model(path=path)
+    word_embeddings, _ = load_model(path=path)
   else:
      word_embeddings = None
 
-  loss_function = nn.BCELoss()
+  loss_function = nn.BCEWithLogitsLoss()
 
   model = Advanced_Conv1dClassifier(
       vocab_size=len(tokenizer.vocab), embedding_dim=embeddings_dim, embeddings=word_embeddings
@@ -124,37 +124,38 @@ def train(path=None, embeddings_dim=4, batch_size=32, lr=1e-2):
   model = model.to(DEVICE)
   optimizer = torch.optim.Adam(params=model.parameters(), lr=lr)
   print('Training...')
+  print('-'*100)
   n_epochs = 10 
   for e in range(n_epochs):
-      train_loss_per_epoch = []
-      train_accuracy = 0
-      for i, batch in enumerate(tqdm(train_dataloader)):
-          optimizer.zero_grad()
-          input, target = batch['review_ids'].to(DEVICE), batch['label'].to(DEVICE)
-          output = model(input)
-          loss = loss_function(output, F.one_hot(target).reshape(-1, 2).float())
-          loss.backward()
-          optimizer.step()
-          train_loss_per_epoch.append(loss.item())
-          train_accuracy += torch.sum(torch.argmax(output, dim=1) == target.squeeze())
-      
-      # Validation
-      valid_loss_per_epoch = []
-      valid_accuracy = 0
-      with torch.no_grad():
-          for i, batch in enumerate(tqdm(valid_dataloader)):
-              input, target = batch['review_ids'].to(DEVICE), batch['label'].to(DEVICE)
-              output = model(input)
-              loss = loss_function(output, F.one_hot(target).reshape(-1, 2).float())
-              valid_loss_per_epoch.append(loss.item())
-              valid_accuracy += torch.sum(torch.argmax(output, dim=1) == target.squeeze())
+    train_loss_per_epoch = []
+    train_accuracy = 0
+    for i, batch in enumerate(tqdm(train_dataloader)):
+      optimizer.zero_grad()
+      input, target = batch['review_ids'].to(DEVICE), batch['label'].to(DEVICE)
+      output = model(input)
+      loss = loss_function(output, target.float())
+      loss.backward()
+      optimizer.step()
+      train_loss_per_epoch.append(loss.item())
+      train_accuracy += torch.sum((output > 0) == target)
+    
+    # Validation
+    valid_loss_per_epoch = []
+    valid_accuracy = 0
+    with torch.no_grad():
+      for i, batch in enumerate(tqdm(valid_dataloader)):
+        input, target = batch['review_ids'].to(DEVICE), batch['label'].to(DEVICE)
+        output = model(input)
+        loss = loss_function(output, target.float())
+        valid_loss_per_epoch.append(loss.item())
+        valid_accuracy += torch.sum((output > 0) == target)
 
-      print('-'*100)
-      print(f'Epoch: {e}')
-      print(f'Train Loss: {np.array(train_loss_per_epoch).mean()}')
-      print(f'Valid Loss: {np.array(valid_loss_per_epoch).mean()}')
-      print(f'Train Accuracy: {train_accuracy / len(train_dataloader.dataset)}')
-      print(f'Valid Accuracy: {valid_accuracy / len(valid_dataloader.dataset)}')
+    print(f'Epoch: {e}')
+    print(f'Train Loss: {np.array(train_loss_per_epoch).mean()}')
+    print(f'Valid Loss: {np.array(valid_loss_per_epoch).mean()}')
+    print(f'Train Accuracy: {train_accuracy / len(train_dataloader.dataset)}')
+    print(f'Valid Accuracy: {valid_accuracy / len(valid_dataloader.dataset)}')
+    print('-'*100)
   return model
     
 
@@ -163,5 +164,5 @@ if __name__ == '__main__':
       path=None,
       embeddings_dim=100,
       batch_size=32,
-      lr=1e-2,
+      lr=1e-3,
    )
